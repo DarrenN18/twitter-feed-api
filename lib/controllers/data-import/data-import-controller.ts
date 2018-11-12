@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
-import DataProcessor from "./data-processor";
+import DataProcessor from "../../helpers/data-processor";
 import UserService from "../../application/services/user-service";
 import TweetService from "application/services/tweet-service";
+import { TweetModel } from "application/models/tweet-model";
 
 
 class DataImportController {
@@ -17,7 +18,7 @@ class DataImportController {
   public async importFiles(request: Request, response: Response) {
     try {
       // @ts-ignore
-      const entities: {users: any, tweets: any, followers: any} = DataProcessor.getEntities(request.files.users, request.files.tweets);
+      const entities: {users: UserModel[], tweets: TweetModel[], followers: any} = DataProcessor.getEntities(request.files.users, request.files.tweets);
       const users = await this.userService.insertUsers(entities.users);
       const followers = DataProcessor.updateFollowerMapping(entities.followers, users);
       const tweetModels = DataProcessor.updateTweetUserMapping(entities.tweets, users);

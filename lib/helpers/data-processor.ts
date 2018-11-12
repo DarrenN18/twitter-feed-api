@@ -1,8 +1,8 @@
-import { IFormData } from "../../application/models/form-data";
-import { UserFollowerInfoModel, UserModel } from "../../application/models/user-model";
-import { TweetModel } from "../../application/models/tweet-model";
-import Guid from "../../common/guid";
-import { FollowerModel } from "../../application/models/follower-model";
+import { IFormData } from "../application/models/form-data";
+import { UserFollowerInfoModel, UserModel } from "../application/models/user-model";
+import { TweetModel } from "../application/models/tweet-model";
+import Guid from "../common/guid";
+import { FollowerModel } from "../application/models/follower-model";
 
 const Delimiter = "\r\n";
 const Keyword = "follows";
@@ -12,13 +12,11 @@ const MinCharacterLength = 3;
 class DataProcessor {
   private userCache: object;
   private followerCache: object;
-  private tweetCache: object;
 
   public static instance: DataProcessor;
   constructor() {
     if (!DataProcessor.instance) {
       this.userCache = {};
-      this.tweetCache = {};
       DataProcessor.instance = this;
       return DataProcessor.instance;
     }
@@ -27,7 +25,6 @@ class DataProcessor {
   public getEntities(userFormData: IFormData, tweetFormData: IFormData): object {
     // Initialize collections
     this.userCache = {};
-    this.tweetCache = {};
     this.followerCache = {};
     // TODO
     const users: UserFollowerInfoModel[] = this.getUsers(userFormData);
@@ -41,7 +38,7 @@ class DataProcessor {
   public getUsers(userFormData: IFormData): UserFollowerInfoModel[]|any {
     if (this.isFormDataValid(userFormData)) {
       const userData = userFormData.data.toString(Encoding);
-      return this.parseUserData(userData);
+      return this.parseUserData(userData, this.userCache, this.followerCache);
     }
     throw new Error("Invalid file type supplied for User data.");
   }
@@ -49,7 +46,7 @@ class DataProcessor {
   /**
    * updateTweetUserMapping
    */
-  public updateTweetUserMapping(tweetMapping: object, userModels: UserModel[]) {
+  public updateTweetUserMapping(tweetModels: TweetModel[], userModels: UserModel[]) {
     let userMapping = {};
     let tweets = [];
 
@@ -57,11 +54,9 @@ class DataProcessor {
       userMapping[u.screenName] = u.id; 
     })
 
-    Object.keys(tweetMapping).forEach(key => {
-      tweetMapping[key].forEach((tweetModel: TweetModel) => {
-        tweetModel.user_id = userMapping[key];
+    tweetModels.forEach(tweetModel => {
+        tweetModel.user_id = userMapping[tweetModel.user_id];
         tweets.push(tweetModel);
-      });
     });
 
     return tweets;
@@ -102,7 +97,7 @@ class DataProcessor {
   /**
    * parseUserData
    */
-  private parseUserData(userData: string): UserFollowerInfoModel[]|any {
+  public parseUserData(userData: string, userCache: object, followerCache: object): UserFollowerInfoModel[]|any {
     try {
       const lines = userData.split(Delimiter);
       lines.forEach((line, idx) => {
@@ -110,18 +105,18 @@ class DataProcessor {
         if (index > MinCharacterLength) {
           let follower = line.substr(0, index - 1).trim();
           let followedUsers = line.substr(index + Keyword.length).split(",");
-          if (!this.userCache.hasOwnProperty(follower)) {
-            this.userCache[follower] = new UserFollowerInfoModel(Guid.newGuid(), follower, [], []);
+          if (!userCache.hasOwnProperty(follower)) {
+            userCache[follower] = new UserFollowerInfoModel(Guid.newGuid(), follower, [], []);
           }
   
           followedUsers.forEach(u => {
             let followedUser = u.trim();
-            if (!this.userCache.hasOwnProperty(followedUser)) {
-              this.userCache[followedUser] = new UserFollowerInfoModel(Guid.newGuid(), followedUser, [], []);
+            if (!userCache.hasOwnProperty(followedUser)) {
+              userCache[followedUser] = new UserFollowerInfoModel(Guid.newGuid(), followedUser, [], []);
             }
 
-            if (!this.followerCache.hasOwnProperty(followedUser)) {
-              this.followerCache[followedUser] = [];
+            if (!followerCache.hasOwnProperty(followedUser)) {
+              followerCache[followedUser] = [];
             }
 
             if (!this.followerCache[followedUser].includes(follower)) {
@@ -146,7 +141,7 @@ class DataProcessor {
   public getTweets(tweetFormData: IFormData): object {
     if (this.isFormDataValid(tweetFormData)) {
       const tweetData = tweetFormData.data.toString(Encoding);
-      return this.parseTweetData(tweetData);
+      return this.parseTweetData(tweetData, this.userCache);
     }
     throw new Error("Invalid file type supplied for Tweet data.");
   }
@@ -154,7 +149,8 @@ class DataProcessor {
   /**
    * parseTweetData
    */
-  private parseTweetData(tweetData: string): object {
+  public parseTweetData(tweetData: string, userCache: object): object {
+    const tweets = [];
     try {
       const lines = tweetData.split(Delimiter);
       lines.forEach((line, idx) => {
@@ -162,13 +158,9 @@ class DataProcessor {
         if (index > MinCharacterLength) {
           const screenName = line.substr(0, index).trim();
           const message = line.substr(index + 1).trim();
-          if (this.userCache.hasOwnProperty(screenName)) {
-            if (!this.tweetCache.hasOwnProperty(screenName)) {
-              this.tweetCache[screenName] = [];
-            }
-            // The tweet can be associated with a user in the existing cache
-            const user = this.userCache[screenName];
-            this.tweetCache[screenName].push(new TweetModel(Guid.newGuid(), user.id, message, Date.now(), null));
+          if (userCache.hasOwnProperty(screenName)) {
+            const user = userCache[screenName];
+            tweets.push(new TweetModel(Guid.newGuid(), user.screenName, message, Date.now(), null));
           } else if (screenName.length > 0) {
             // Create the user?
           }
@@ -181,7 +173,7 @@ class DataProcessor {
       return error;
     }
 
-    return this.tweetCache;
+    return tweets;
   }
   
 }
