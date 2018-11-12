@@ -4,7 +4,7 @@ import { TweetModel } from "../application/models/tweet-model";
 import Guid from "../common/guid";
 import { FollowerModel } from "../application/models/follower-model";
 
-const Delimiter = "\r\n";
+const Delimiter = process.platform === "win32" ? "\r\n" : "\n";
 const Keyword = "follows";
 const Encoding = "utf8";
 const MinCharacterLength = 3;
